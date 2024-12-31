@@ -54,6 +54,7 @@ func configureCmdRun(cmd *cobra.Command, args []string) error {
 			DisplayMessage: "Client Secret",
 			DefaultValue:   clientSecret,
 			ValidateInput:  validationFunc,
+			IsSensitive:    true,
 			Order:          1,
 		},
 	}

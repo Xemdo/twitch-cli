@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Pre-defined for user in the Values map in TextInputOptions. Will be updated when iterated through by Charm's Update().
@@ -19,6 +20,9 @@ type TextInputPrompt struct {
 
 	// Validation function. If no validation needed, have it return nil.
 	ValidateInput func(string) error
+
+	// Whether or not to hide this value from being displayed to the user. Will use "<hidden>" instead.
+	IsSensitive bool
 
 	// If order matters for the map of prompts, this is used for ordering those prompts. Lowest has priority.
 	Order int
@@ -54,11 +58,31 @@ func determineNextPrompt(remainingPrompts map[string]TextInputPrompt) string {
 	return lowestKey
 }
 
+func determinePlaceholderValue(prompt TextInputPrompt) string {
+	if prompt.IsSensitive {
+		return "<hidden>"
+	}
+
+	return prompt.DefaultValue
+}
+
+func determinePlaceholderStyle(prompt TextInputPrompt) lipgloss.Style {
+	base := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")) // ANSI grey
+
+	if prompt.IsSensitive {
+		return base.Italic(true)
+	}
+
+	return base
+}
+
 func createInitialModel(options TextInputOptions) model {
 	ti := textinput.New()
 	ti.Focus()
 	ti.CharLimit = options.CharLimit
-	ti.Placeholder = options.Prompts[determineNextPrompt(options.Prompts)].DefaultValue
+	ti.Placeholder = determinePlaceholderValue(options.Prompts[determineNextPrompt(options.Prompts)])
+	ti.PlaceholderStyle = determinePlaceholderStyle(options.Prompts[determineNextPrompt(options.Prompts)])
 
 	return model{
 		textInputModel:   ti,
@@ -111,21 +135,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case tea.KeyEnter:
+			currentPrompt := m.remainingPrompts[m.currentPromptKey]
 			inputtedValue := m.textInputModel.Value()
 
 			// Check if we should use the placeholder instead
 			if len(inputtedValue) == 0 {
-				inputtedValue = m.textInputModel.Placeholder
+				inputtedValue = currentPrompt.DefaultValue
 			}
 
 			// Check string validation
 			var validationErr error
-			if m.remainingPrompts[m.currentPromptKey].ValidateInput != nil {
-				validationErr = m.remainingPrompts[m.currentPromptKey].ValidateInput(inputtedValue)
+			if currentPrompt.ValidateInput != nil {
+				validationErr = currentPrompt.ValidateInput(inputtedValue)
 			}
 
 			if validationErr != nil {
-				m.err = fmt.Errorf("Bad input for %s: %s", m.remainingPrompts[m.currentPromptKey].DisplayMessage, validationErr.Error())
+				m.err = fmt.Errorf("Bad input for %s: %s", currentPrompt.DisplayMessage, validationErr.Error())
 				return m, tea.Quit
 			}
 
@@ -135,10 +160,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Remove current prompt from remaining prompts list, then find the next one
 			delete(m.remainingPrompts, m.currentPromptKey)
 			m.currentPromptKey = determineNextPrompt(m.remainingPrompts)
+			currentPrompt = m.remainingPrompts[m.currentPromptKey] // Update currentPrompt to reflect the changes
 
 			// Reset input and set default for the next prompt
 			m.textInputModel.Reset()
-			m.textInputModel.Placeholder = m.remainingPrompts[m.currentPromptKey].DefaultValue
+			m.textInputModel.Placeholder = determinePlaceholderValue(currentPrompt)
+			m.textInputModel.PlaceholderStyle = determinePlaceholderStyle(currentPrompt)
 
 			// Exit if that was the last prompt
 			if len(m.remainingPrompts) == 0 {
