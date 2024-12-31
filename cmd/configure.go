@@ -9,6 +9,9 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/twitchdev/twitch-cli/internal/util"
+	"github.com/twitchdev/twitch-cli/internal/util/tui"
 )
 
 var clientID string
@@ -29,38 +32,49 @@ func init() {
 }
 
 func configureCmdRun(cmd *cobra.Command, args []string) error {
-	/*var err error
-	if clientID == "" {
-		clientIDPrompt := promptui.Prompt{
-			Label: "Client ID",
-			Validate: func(s string) error {
-				if len(s) == 30 || len(s) == 31 {
-					return nil
-				}
-				return errors.New("Invalid length for Client ID")
-			},
+	clientID = viper.GetString("clientId")
+	clientSecret = viper.GetString("clientSecret")
+
+	validationFunc := func(s string) error {
+		if len(strings.TrimSpace(s)) == 30 || len(strings.TrimSpace(s)) == 31 {
+			return nil
 		}
 
-		clientID, err = clientIDPrompt.Run()
+		return fmt.Errorf("Invalid length")
 	}
 
-	if clientSecret == "" {
-		clientSecretPrompt := promptui.Prompt{
-			Label: "Client Secret",
-			Validate: func(s string) error {
-				if len(s) == 30 || len(s) == 31 {
-					return nil
-				}
-				return errors.New("Invalid length for Client Secret")
-			},
-		}
-
-		clientSecret, err = clientSecretPrompt.Run()
+	inputPrompts := map[string]tui.TextInputPrompt{
+		"clientid": {
+			DisplayMessage: "Client ID",
+			DefaultValue:   clientID,
+			ValidateInput:  validationFunc,
+			Order:          0,
+		},
+		"clientsecret": {
+			DisplayMessage: "Client Secret",
+			DefaultValue:   clientSecret,
+			ValidateInput:  validationFunc,
+			Order:          1,
+		},
 	}
 
-	if clientID == "" && clientSecret == "" {
-		return fmt.Errorf("Must specify either the Client ID or Secret")
+	responses, err := tui.TextInput(tui.TextInputOptions{
+		CharLimit: 31,
+		Prompts:   inputPrompts,
+	})
+
+	if err != nil {
+		return fmt.Errorf("%s\nNo configuration was updated. Please check inputs and try again.", err.Error())
 	}
+
+	// Check for operation being cancelled
+	if err == nil && responses == nil {
+		return nil
+	}
+
+	// Set the configuration using the new values
+	clientID = responses["clientid"]
+	clientSecret = responses["clientsecret"]
 
 	viper.Set("clientId", clientID)
 	viper.Set("clientSecret", clientSecret)
@@ -74,29 +88,7 @@ func configureCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Failed to write configuration: %v", err.Error())
 	}
 
-	fmt.Println("Updated configuration.")*/
-
-	//p := tea.NewProgram(ConfigureCmdInitialModel())
-	//if _, err := p.Run(); err != nil {
-	//	log.Fatal(err)
-	//}
-
-	//var m tea.Model
-	if clientID == "" {
-		p := tea.NewProgram(ConfigureCmdInitialModel(ConfigureCmdStateClientID))
-
-		m, err := p.Run()
-		ccm := m.(configureCmdModel)
-
-		if err != nil {
-			return err
-		}
-		if ccm.err != nil {
-			return ccm.err
-		}
-
-		fmt.Printf("%s\n", ccm.input.Value())
-	}
+	fmt.Println("Updated configuration.")
 
 	return nil
 }
