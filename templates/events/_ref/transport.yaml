@@ -1,0 +1,20 @@
+# ref for subscription.transport
+internal_override: false
+
+reference_name: transport
+reference:
+  method:
+    type: string
+    ref: transport_method
+  callback:
+    type: string
+    ref: transport_callback
+  session_id:
+    type: string
+    ref: transport_session_id
+  connected_at:
+    type: string
+    ref: transport_connected_at
+  disconnected_at:
+    type: string
+    ref: transport_disconnected_at

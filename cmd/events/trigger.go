@@ -94,7 +94,7 @@ func triggerCmdRun(cmd *cobra.Command, args []string) error {
 	for i := 0; i < count; i++ {
 		res, err := trigger.Fire(trigger.TriggerParameters{
 			Event:               args[0],
-			SubscriptionID:      subscriptionID,
+			EventID:             subscriptionID,
 			EventMessageID:      eventMessageID,
 			Transport:           transport,
 			ForwardAddress:      forwardAddress,

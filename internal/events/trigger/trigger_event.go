@@ -4,20 +4,10 @@ package trigger
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/rpc"
-	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/spf13/viper"
-	"github.com/twitchdev/twitch-cli/internal/database"
-	"github.com/twitchdev/twitch-cli/internal/events"
-	"github.com/twitchdev/twitch-cli/internal/events/types"
-	"github.com/twitchdev/twitch-cli/internal/models"
-	rpc_handler "github.com/twitchdev/twitch-cli/internal/rpc"
 	"github.com/twitchdev/twitch-cli/internal/util"
 )
 
@@ -42,7 +32,7 @@ type TriggerParameters struct {
 	GameID              string
 	Tier                string
 	Timestamp           string
-	SubscriptionID      string
+	EventID             string
 	EventMessageID      string
 	CharityCurrentValue int
 	CharityTargetValue  int
@@ -61,8 +51,99 @@ type TriggerResponse struct {
 	Timestamp string
 }
 
-// Fire emits an event using the TriggerParameters defined above.
 func Fire(p TriggerParameters) (string, error) {
+	// Register all events before we proceed
+	err := RegisterAllEvents()
+	if err != nil {
+		return "", err
+	}
+
+	if p.EventID == "" {
+		p.EventID = util.RandomGUID()
+	}
+
+	if p.ClientID == "" {
+		p.ClientID = viper.GetString("ClientID") // Get from config
+
+		if p.ClientID == "" {
+			// --client-id wasn't used, and config file doesn't have a Client ID set.
+			// Generate a randomized one
+			p.ClientID = util.RandomClientID()
+		}
+	}
+
+	if p.ToUser == "" {
+		p.ToUser = util.RandomUserID()
+	}
+
+	if p.FromUser == "" {
+		p.FromUser = util.RandomUserID()
+	}
+
+	if p.GameID == "" {
+		p.GameID = fmt.Sprint(util.RandomInt(10 * 1000))
+	}
+
+	switch p.Tier {
+	case "":
+		p.Tier = "1000"
+	case "1000", "2000", "3000":
+		// do nothing, these are valid values
+	default:
+		return "", fmt.Errorf(
+			"Discarding event: Invalid tier provided.\n" +
+				"Valid values are 1000, 2000 or 3000")
+	}
+
+	if p.EventMessageID == "" {
+		p.EventMessageID = util.RandomGUID()
+	}
+
+	if p.Timestamp == "" {
+		p.Timestamp = util.GetTimestamp().Format(time.RFC3339Nano)
+	} else {
+		// Verify custom timestamp
+		_, err := time.Parse(time.RFC3339Nano, p.Timestamp)
+		if err != nil {
+			return "", fmt.Errorf(
+				`Discarding event: Invalid timestamp provided.
+Please follow RFC3339Nano, which is used by Twitch as seen here:
+https://dev.twitch.tv/docs/eventsub/handling-webhook-events#processing-an-event`)
+		}
+	}
+
+	mockAbstract, err := NEW_GetByTriggerAndTransportAndVersion(p.Event, p.Transport, p.Version)
+	if err != nil {
+		return "", err
+	}
+
+	mockEvent := MockEventBase{
+		Subscription: make(map[string]any),
+		Event:        make(map[string]any),
+	}
+
+	//_ = map[string]types.MockAbstractData(mockEvent.Subscription)
+
+	//mockEvent.Subscription, err = types.GenerateEventObject(
+	//	mockAbstract.Subscription.(map[string]types.MockAbstractData),
+	//)
+
+	// Go through subscription data
+	mockEvent.Subscription, err = GenerateSubscriptionObject(*mockAbstract, p)
+	if err != nil {
+		return "", err
+	}
+
+	j, err := json.Marshal(mockEvent)
+	if err != nil {
+		return "", err
+	}
+
+	return string(j), nil
+}
+
+// Fire emits an event using the TriggerParameters defined above.
+/*func Fire(p TriggerParameters) (string, error) {
 	var resp events.MockEventResponse
 	var err error
 
@@ -99,14 +180,8 @@ func Fire(p TriggerParameters) (string, error) {
 				"Valid values are 1000, 2000 or 3000")
 	}
 
-	// the header twitch-eventsub-message-id
 	if p.EventMessageID == "" {
 		p.EventMessageID = util.RandomGUID()
-	}
-
-	// the body subscription.id
-	if p.SubscriptionID == "" {
-		p.SubscriptionID = util.RandomGUID()
 	}
 
 	if p.Timestamp == "" {
@@ -123,8 +198,7 @@ https://dev.twitch.tv/docs/eventsub/handling-webhook-events#processing-an-event`
 	}
 
 	eventParamaters := events.MockEventParameters{
-		SubscriptionID:      p.SubscriptionID,
-		EventMessageID:      p.EventMessageID,
+		ID:                  p.EventID,
 		Trigger:             p.Event,
 		Transport:           p.Transport,
 		FromUserID:          p.FromUser,
@@ -169,7 +243,6 @@ https://dev.twitch.tv/docs/eventsub/handling-webhook-events#processing-an-event`
 		return "", err
 	}
 
-	//color.New().Add(color.FgGreen).Println(fmt.Sprintf(`Insert into DB with %v`, resp.ID));
 	err = db.NewQuery(nil, 100).InsertIntoDB(database.EventCacheParameters{
 		ID:        resp.ID,
 		Event:     p.Event,
@@ -277,4 +350,4 @@ https://dev.twitch.tv/docs/eventsub/handling-webhook-events#processing-an-event`
 	}
 
 	return string(resp.JSON), nil
-}
+}*/
