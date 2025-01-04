@@ -46,16 +46,17 @@ event:
     ref: --
   broadcaster_user_id:
     type: string
-    ref: --
+    ref: target_id
   broadcaster_user_login:
     type: string
-    ref: --
+    ref: target_user_login
   broadcaster_user_name:
     type: string
-    ref: --
+    ref: target_user_name
   tier:
     type: string
     ref: --
+    default: "1000"
   is_gift:
     type: boolean
     ref: --
