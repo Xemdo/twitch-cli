@@ -112,7 +112,7 @@ func RegisterReference(refAbstract ReferenceAbstract) (bool, string) {
 	return true, ""
 }
 
-func NEW_GetByTriggerAndTransportAndVersion(trigger string, transport string, version string) (*MockAbstract, error) {
+func GetByTriggerAndTransportAndVersion(trigger string, transport string, version string) (*MockAbstract, error) {
 	validEventBadVersions := []string{}
 	var latestEventSeen *MockAbstract
 
@@ -165,16 +165,21 @@ func NEW_GetByTriggerAndTransportAndVersion(trigger string, transport string, ve
 }
 
 func GenerateSubscriptionObject(mockAbstract MockAbstract, p TriggerParameters) (map[string]any, error) {
-	var subObj map[string]any
-
-	data, err := handleRoot(mockAbstract.Subscription, mockAbstract, p)
+	subObj, err := handleRoot(mockAbstract.Subscription, mockAbstract, p)
 	if err != nil {
 		return nil, err
 	}
 
-	subObj = data
-
 	return subObj, nil
+}
+
+func GenerateEventObject(mockAbstract MockAbstract, p TriggerParameters) (map[string]any, error) {
+	eventObj, err := handleRoot(mockAbstract.Event, mockAbstract, p)
+	if err != nil {
+		return nil, err
+	}
+
+	return eventObj, nil
 }
 
 func handleRoot(data map[string]MockAbstractData, root MockAbstract, p TriggerParameters) (map[string]any, error) {
@@ -188,7 +193,11 @@ func handleRoot(data map[string]MockAbstractData, root MockAbstract, p TriggerPa
 			if err != nil {
 				return nil, err
 			}
-			workingField[identifier] = resolvedRef
+
+			// If its null, don't set it at all. Setting it to null will make it appear in the JSON.
+			if resolvedRef != nil {
+				workingField[identifier] = resolvedRef
+			}
 		} else {
 			// Not a reference field, handle normally
 
@@ -248,12 +257,14 @@ func resolveReference(identifier string, innards MockAbstractData, root MockAbst
 	for _, refAbstract := range referenceAbstracts {
 		if refAbstract.Name == *innards.Ref {
 			// Generate object based on the reference file
-			// TODO: Write this recursively later on, when there's reusable code
-			// Current limitations: Only goes 1 deep; no recursive references because of this
 
-			fmt.Printf("TODO: Handle ref: %v\n", refAbstract.Name)
+			// TODO: Come up with a better name than "workingField"
+			workingField, err := handleRoot(refAbstract.Reference, root, p)
+			if err != nil {
+				return nil, err
+			}
 
-			return "TODO", nil
+			return workingField, nil
 		}
 	}
 
@@ -308,7 +319,25 @@ func resolveBuiltInReference(identifier string, innards MockAbstractData, root M
 		if innards.Type != "string" {
 			return nil, fmt.Errorf("Parsing error: ref `target_id` must be matched with type `string`")
 		}
-		return p.ToUser, nil
+		return p.ToUserID, nil
+
+	case "target_user_login":
+		if innards.Type != "string" {
+			return nil, fmt.Errorf("Parsing error: ref `target_user_login` must be matched with type `string`")
+		}
+		return p.ToUserLogin, nil
+
+	case "target_user_name":
+		if innards.Type != "string" {
+			return nil, fmt.Errorf("Parsing error: ref `target_user_name` must be matched with type `string`")
+		}
+		return p.ToUserDisplayName, nil
+
+	case "tier":
+		if innards.Type != "string" {
+			return nil, fmt.Errorf("Parsing error: ref `target_user_name` must be matched with type `string`")
+		}
+		return p.Tier, nil
 
 	case "transport_method":
 		if innards.Type != "string" {
@@ -321,7 +350,7 @@ func resolveBuiltInReference(identifier string, innards MockAbstractData, root M
 			return nil, fmt.Errorf("Parsing error: ref `transport_callback` must be matched with type `string`")
 		}
 		if p.Transport == "webhook" {
-			return "null", nil // TODO: Get this from somewhere else in case there's actually a callback
+			return "PLACEHOLDER", nil // TODO: Get this from somewhere else in case there's actually a callback
 		} else {
 			return nil, nil
 		}
@@ -331,7 +360,7 @@ func resolveBuiltInReference(identifier string, innards MockAbstractData, root M
 			return nil, fmt.Errorf("Parsing error: ref `transport_method` must be matched with type `string`")
 		}
 		if p.Transport == "websocket" {
-			return "null", nil // TODO: Get this from somewhere else in case there's actually a session ID
+			return "PLACEHOLDER", nil // TODO: Get this from somewhere else in case there's actually a session ID
 		} else {
 			return nil, nil
 		}
@@ -341,7 +370,7 @@ func resolveBuiltInReference(identifier string, innards MockAbstractData, root M
 			return nil, fmt.Errorf("Parsing error: ref `transport_method` must be matched with type `string`")
 		}
 		if p.Transport == "websocket" {
-			return "null", nil // TODO: Get this from somewhere else in case there's actually a timestamp
+			return "PLACEHOLDER", nil // TODO: Get this from somewhere else in case there's actually a timestamp
 		} else {
 			return nil, nil
 		}
@@ -372,6 +401,8 @@ func getBackupDefault(dataType string, identifier string, root MockAbstract) (an
 		return 0, nil
 	case "int[]":
 		return []int{}, nil
+	case "boolean":
+		return false, nil
 	case "object":
 		return make(map[string]any), nil
 	case "object[]":
@@ -379,8 +410,4 @@ func getBackupDefault(dataType string, identifier string, root MockAbstract) (an
 	default:
 		return nil, fmt.Errorf("Unexpected type `%v` for identifier `%v` (in file %v)", dataType, identifier, root.Filepath)
 	}
-}
-
-func GenerateEventObject() (map[string]MockAbstractData, error) {
-	return nil, nil
 }

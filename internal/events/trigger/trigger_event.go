@@ -16,8 +16,12 @@ type TriggerParameters struct {
 	Event               string
 	Transport           string
 	IsAnonymous         bool
-	FromUser            string
-	ToUser              string
+	FromUserID          string
+	FromUserLogin       string // TODO: implement as a flag
+	FromUserDisplayName string // TODO: implement as a flag
+	ToUserID            string
+	ToUserLogin         string // TODO: implement as a flag
+	ToUserDisplayName   string // TODO: implement as a flag
 	GiftUser            string
 	EventStatus         string
 	SubscriptionStatus  string
@@ -72,12 +76,24 @@ func Fire(p TriggerParameters) (string, error) {
 		}
 	}
 
-	if p.ToUser == "" {
-		p.ToUser = util.RandomUserID()
+	if p.ToUserID == "" {
+		p.ToUserID = util.RandomUserID()
+	}
+	if p.ToUserDisplayName == "" {
+		p.ToUserDisplayName = "testBroadcaster"
+	}
+	if p.ToUserLogin == "" {
+		p.ToUserLogin = "testbroadcaster"
 	}
 
-	if p.FromUser == "" {
-		p.FromUser = util.RandomUserID()
+	if p.FromUserID == "" {
+		p.FromUserID = util.RandomUserID()
+	}
+	if p.FromUserDisplayName == "" {
+		p.FromUserDisplayName = "testFromUser"
+	}
+	if p.FromUserLogin == "" {
+		p.FromUserLogin = "testfromuser"
 	}
 
 	if p.GameID == "" {
@@ -112,7 +128,7 @@ https://dev.twitch.tv/docs/eventsub/handling-webhook-events#processing-an-event`
 		}
 	}
 
-	mockAbstract, err := NEW_GetByTriggerAndTransportAndVersion(p.Event, p.Transport, p.Version)
+	mockAbstract, err := GetByTriggerAndTransportAndVersion(p.Event, p.Transport, p.Version)
 	if err != nil {
 		return "", err
 	}
@@ -122,14 +138,14 @@ https://dev.twitch.tv/docs/eventsub/handling-webhook-events#processing-an-event`
 		Event:        make(map[string]any),
 	}
 
-	//_ = map[string]types.MockAbstractData(mockEvent.Subscription)
-
-	//mockEvent.Subscription, err = types.GenerateEventObject(
-	//	mockAbstract.Subscription.(map[string]types.MockAbstractData),
-	//)
-
 	// Go through subscription data
 	mockEvent.Subscription, err = GenerateSubscriptionObject(*mockAbstract, p)
+	if err != nil {
+		return "", err
+	}
+
+	// Go through event data
+	mockEvent.Event, err = GenerateEventObject(*mockAbstract, p)
 	if err != nil {
 		return "", err
 	}

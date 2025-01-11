@@ -55,7 +55,7 @@ event:
     ref: target_user_name
   tier:
     type: string
-    ref: --
+    ref: tier
     default: "1000"
   is_gift:
     type: boolean
